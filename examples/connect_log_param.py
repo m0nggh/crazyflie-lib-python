@@ -31,15 +31,12 @@ def simple_log(scf, logconf):
             data = log_entry[1]
             logconf_name = log_entry[2]
 
-            # print('[%d][%s]: %s' % (timestamp, logconf_name, data))
             list = []
             for name, value in data.items():
-                # print(f'{name}: {value:3.3f} ', end='')
                 text = "{}: {}"
                 print(text.format(name, value))
                 list.append(value)
             print(list)
-            print("New State:")
 
 # this helper function allows you to manipulate the log data as you wish to
 
@@ -50,8 +47,8 @@ def log_stab_callback(timestamp, data, logconf):
         text = "{}: {}"
         print(text.format(name, value))
         list.append(value)
-    print(list)
-    print("New State:")
+    print("The current values are: {}".format(list))
+    return list
 
 # Logging variables can be received separately from this function, in a callback independently of the main loop-rate
 
@@ -61,7 +58,7 @@ def simple_log_async(scf, logconf):
     cf.log.add_config(logconf)
     logconf.data_received_cb.add_callback(log_stab_callback)
     logconf.start()  # logconf needs to be started manually and stopped
-    time.sleep(5)  # can set to a very huge number so the logconf takes in values continuously
+    time.sleep(10)  # can set to a very huge number so the logconf takes in values continuously
     logconf.stop()
 
 
@@ -69,7 +66,7 @@ if __name__ == '__main__':
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
 
-    lg_stab = LogConfig(name='StateEstimate', period_in_ms=1000)  # min 10ms, currently set to 1s, default is 40ms
+    lg_stab = LogConfig(name='StateEstimate', period_in_ms=40)  # min 10ms, currently set to 1s, default is 40ms
     # only can contain up to 26bytes
     lg_stab.add_variable('stateEstimate.roll', 'float')
     lg_stab.add_variable('stateEstimate.pitch', 'float')
