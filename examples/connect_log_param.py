@@ -1,5 +1,6 @@
 import logging
 import time
+import numpy as np
 
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
@@ -8,6 +9,7 @@ from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncLogger import SyncLogger
 
 uri = 'radio://0/80/250K/E7E7E7E7E7'
+globalList = []
 
 # Only output errors from the logging framework
 logging.basicConfig(level=logging.ERROR)
@@ -44,17 +46,24 @@ def simple_log(scf, logconf):
 
 def log_stab_callback(timestamp, data, logconf):
     tempList = []
+    global globalList
     for name, value in data.items():
-        text = "{}: {}"
+        text = "{}: {:.2f}"
         print(text.format(name, value))
         tempList.append(value)
-    displayList(tempList)  # instead of returning the list, have to intercept at this point and take the values consistently
+    # updating the global list consistently
+    # globalList = list(tempList)
+    globalList = list(np.around(np.array(tempList), 2))  # if 2 decimal places is needed
 
-# added an intermediate function to test if the list can be retrieved properly
+# added intermediate functions to test if the list can be returned properly
 
 
 def displayList(tempList):
     print("The current values are: {}".format(tempList))
+
+
+def returnList():
+    return globalList
 
 # Logging variables can be received separately from this function, in a callback independently of the main loop-rate
 
@@ -86,3 +95,5 @@ if __name__ == '__main__':
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
 
         simple_log_async(scf, lg_stab)
+
+    displayList(returnList())  # to test if the calling of function works
