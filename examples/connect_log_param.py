@@ -36,19 +36,24 @@ def simple_log(scf, logconf):
                 text = "{}: {}"
                 print(text.format(name, value))
                 list.append(value)
-            print(list)
+            displayList(list)  # instead of returning the list, have to intercept at this point and take the values consistently
 
 # this helper function allows you to manipulate the log data as you wish to
 
 
 def log_stab_callback(timestamp, data, logconf):
-    list = []
+    tempList = []
     for name, value in data.items():
         text = "{}: {}"
         print(text.format(name, value))
-        list.append(value)
-    print("The current values are: {}".format(list))
-    return list
+        tempList.append(value)
+    displayList(tempList)  # instead of returning the list, have to intercept at this point and take the values consistently
+
+# added an intermediate function to test if the list can be retrieved properly
+
+
+def displayList(tempList):
+    print("The current values are: {}".format(tempList))
 
 # Logging variables can be received separately from this function, in a callback independently of the main loop-rate
 
@@ -66,7 +71,7 @@ if __name__ == '__main__':
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
 
-    lg_stab = LogConfig(name='StateEstimate', period_in_ms=40)  # min 10ms, currently set to 1s, default is 40ms
+    lg_stab = LogConfig(name='StateEstimate', period_in_ms=1000)  # min 10ms, currently set to 1s, default is 40ms
     # only can contain up to 26bytes
     lg_stab.add_variable('stateEstimate.roll', 'float')
     lg_stab.add_variable('stateEstimate.pitch', 'float')
