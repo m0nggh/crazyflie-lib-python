@@ -31,12 +31,13 @@ def simple_log(scf, logconf):
             data = log_entry[1]
             logconf_name = log_entry[2]
 
-            list = []
+            tempList = []
             for name, value in data.items():
                 text = "{}: {}"
                 print(text.format(name, value))
-                list.append(value)
-            displayList(list)  # instead of returning the list, have to intercept at this point and take the values consistently
+                tempList.append(value)
+            # instead of returning the list, have to intercept at this point and take the values consistently
+            displayList(tempList)
 
 # this helper function allows you to manipulate the log data as you wish to
 
