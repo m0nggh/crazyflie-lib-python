@@ -29,6 +29,7 @@ and prints it to the console. After 10s the application disconnects and exits.
 """
 import logging
 import time
+import numpy as np
 from threading import Timer
 
 import cflib.crtp  # noqa
@@ -36,7 +37,7 @@ from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper
 
-uri = uri_helper.uri_from_env(default='radio://0/80/250K/E7E7E7E7E7')
+uri = uri_helper.uri_from_env(default="radio://0/80/250K/E7E7E7E7E7")
 
 # Only output errors from the logging framework
 logging.basicConfig(level=logging.ERROR)
@@ -48,10 +49,13 @@ class LoggingExample:
     link uri and disconnects after 5s.
     """
 
-    def __init__(self, link_uri):
-        """ Initialize and run the example with the specified link_uri """
+    globalList = []
 
-        self._cf = Crazyflie(rw_cache='./cache')
+    def __init__(self, link_uri):
+        """Initialize and run the example with the specified link_uri"""
+        cflib.crtp.init_drivers()
+
+        self._cf = Crazyflie(rw_cache="./cache")
 
         # Connect some callbacks from the Crazyflie API
         self._cf.connected.add_callback(self._connected)
@@ -59,7 +63,7 @@ class LoggingExample:
         self._cf.connection_failed.add_callback(self._connection_failed)
         self._cf.connection_lost.add_callback(self._connection_lost)
 
-        print('Connecting to %s' % link_uri)
+        print("Connecting to %s" % link_uri)
 
         # Try to connect to the Crazyflie
         self._cf.open_link(link_uri)
@@ -68,20 +72,17 @@ class LoggingExample:
         self.is_connected = True
 
     def _connected(self, link_uri):
-        """ This callback is called form the Crazyflie API when a Crazyflie
+        """This callback is called form the Crazyflie API when a Crazyflie
         has been connected and the TOCs have been downloaded."""
-        print('Connected to %s' % link_uri)
+        print("Connected to %s" % link_uri)
 
         # The definition of the logconfig can be made before connecting
-        self._lg_stab = LogConfig(name='Stabilizer', period_in_ms=100)
-        self._lg_stab.add_variable('stateEstimate.x', 'float')
-        self._lg_stab.add_variable('stateEstimate.y', 'float')
-        self._lg_stab.add_variable('stateEstimate.z', 'float')
-        self._lg_stab.add_variable('stabilizer.roll', 'float')
-        self._lg_stab.add_variable('stabilizer.pitch', 'float')
-        self._lg_stab.add_variable('stabilizer.yaw', 'float')
+        self._lg_stab = LogConfig(name="StateEstimate", period_in_ms=100)
+        self._lg_stab.add_variable("stateEstimate.roll", "float")
+        self._lg_stab.add_variable("stateEstimate.pitch", "float")
+        self._lg_stab.add_variable("stateEstimate.yaw", "float")
         # The fetch-as argument can be set to FP16 to save space in the log packet
-        self._lg_stab.add_variable('pm.vbat', 'FP16')
+        self._lg_stab.add_variable("pm.vbat", "FP16")
 
         # Adding the configuration cannot be done until a Crazyflie is
         # connected, since we need to check that the variables we
@@ -95,44 +96,55 @@ class LoggingExample:
             # Start the logging
             self._lg_stab.start()
         except KeyError as e:
-            print('Could not start log configuration,'
-                  '{} not found in TOC'.format(str(e)))
+            print(
+                "Could not start log configuration,"
+                "{} not found in TOC".format(str(e))
+            )
         except AttributeError:
-            print('Could not add Stabilizer log config, bad configuration.')
+            print("Could not add Stabilizer log config, bad configuration.")
 
-        # Start a timer to disconnect in 10s
+        # Start a timer to disconnect in 5s
         t = Timer(5, self._cf.close_link)
         t.start()
 
     def _stab_log_error(self, logconf, msg):
         """Callback from the log API when an error occurs"""
-        print('Error when logging %s: %s' % (logconf.name, msg))
+        print("Error when logging %s: %s" % (logconf.name, msg))
 
     def _stab_log_data(self, timestamp, data, logconf):
         """Callback from a the log API when data arrives"""
-        print(f'[{timestamp}][{logconf.name}]: ', end='')
+        tempList = []
+        print(f"[{timestamp}][{logconf.name}]: ", end="")
         for name, value in data.items():
-            print(f'{name}: {value:3.3f} ', end='')
+            print(f"{name}: {value:3.3f} ", end="")
+            tempList.append(value)
         print()
+        self.globalList = list(np.around(np.array(tempList), 2))
+        # print(self.globalList)
+        return self.globalList
 
     def _connection_failed(self, link_uri, msg):
         """Callback when connection initial connection fails (i.e no Crazyflie
         at the specified address)"""
-        print('Connection to %s failed: %s' % (link_uri, msg))
+        print("Connection to %s failed: %s" % (link_uri, msg))
         self.is_connected = False
 
     def _connection_lost(self, link_uri, msg):
         """Callback when disconnected after a connection has been made (i.e
         Crazyflie moves out of range)"""
-        print('Connection to %s lost: %s' % (link_uri, msg))
+        print("Connection to %s lost: %s" % (link_uri, msg))
 
     def _disconnected(self, link_uri):
         """Callback when the Crazyflie is disconnected (called in all cases)"""
-        print('Disconnected from %s' % link_uri)
+        print("Disconnected from %s" % link_uri)
         self.is_connected = False
 
+    def returnList(self):
+        print(self.globalList)
+        return self.globalList
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
 
