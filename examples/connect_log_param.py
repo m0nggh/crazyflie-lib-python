@@ -28,6 +28,7 @@ class Interface:
         # Initialize the low-level drivers
         cflib.crtp.init_drivers()
         print(uri)
+        self._cf = Crazyflie(rw_cache="./cache")
 
         lg_stab = LogConfig(
             name="StateEstimate", period_in_ms=100
@@ -42,10 +43,10 @@ class Interface:
         # lg_stab.add_variable('stabilizer.thrust', 'float')
         # lg_stab.add_variable('acc.x', 'float')
 
-        with SyncCrazyflie(uri, cf=Crazyflie(rw_cache="./cache")) as scf:
+        with SyncCrazyflie(uri, self._cf) as scf:
 
-            self.simple_connect()
-            # self.simple_log_async(scf, lg_stab)
+            # self.simple_connect()
+            self.simple_log_async(scf, lg_stab)
             print("is the function even working")
 
     # added intermediate functions to test if the list can be returned properly
@@ -56,9 +57,9 @@ class Interface:
     # Logging variables can be received separately from this function, in a callback independently of the main loop-rate
 
     def simple_log_async(self, scf, logconf):
-        cf = scf.cf
-        cf.log.add_config(logconf)
-        logconf.data_received_cb.add_callback(log_stab_callback)
+        self._cf = scf.cf
+        self._cf.log.add_config(logconf)
+        logconf.data_received_cb.add_callback(self.log_stab_callback)
         logconf.start()  # logconf needs to be started manually and stopped
         time.sleep(
             10

@@ -26,17 +26,19 @@
 """
 Simple example that connects to the first Crazyflie found, logs the Stabilizer
 and prints it to the console. After 5s the application disconnects and exits.
-This file is referenced and adapted from basiclog.py.
+This file is referenced and adapted from basiclog.py and ramp.py
 """
 import logging
 import time
 import numpy as np
 from threading import Timer
+from threading import Thread
 
 import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper
+from cflib.positioning.motion_commander import MotionCommander
 
 uri = uri_helper.uri_from_env(default="radio://0/80/250K/E7E7E7E7E7")
 
@@ -51,6 +53,7 @@ class Interface:
     """
 
     globalList = []
+    DEFAULT_HEIGHT = 0.5
 
     def __init__(self, link_uri):
         """Initialize and run the example with the specified link_uri"""
@@ -106,8 +109,11 @@ class Interface:
             print("Could not add Stabilizer log config, bad configuration.")
 
         # Start a timer to disconnect in 5s
-        # t = Timer(100, self._cf.close_link)
-        # t.start()
+        t = Timer(10, self._cf.close_link)
+        t.start()
+        # with MotionCommander(self._cf, default_height=self.DEFAULT_HEIGHT) as mc:
+        #     time.sleep(3)
+        #     mc.stop()
 
     def _stab_log_error(self, logconf, msg):
         """Callback from the log API when an error occurs"""
@@ -150,6 +156,40 @@ class Interface:
         """Helper function to return real time data on clojure side"""
         print(self.globalList)
         return self.globalList
+
+    def returnThread(self):
+        Thread(target=self.returnList()).start()
+        # time.sleep(3)
+
+    def take_off_simple(self):
+        # with MotionCommander(self._cf, default_height=self.DEFAULT_HEIGHT) as mc:
+        #     time.sleep(3)
+        #     mc.stop()
+        thrust_mult = 1
+        thrust_step = 500
+        thrust = 20000
+        pitch = 0
+        roll = 0
+        yawrate = 0
+
+        # Unlock startup thrust protection
+        self._cf.commander.send_setpoint(0, 0, 0, 0)
+
+        while thrust >= 20000:
+            self._cf.commander.send_setpoint(roll, pitch, yawrate, thrust)
+            time.sleep(0.1)
+            if thrust >= 25000:
+                thrust_mult = -1
+            thrust += thrust_step * thrust_mult
+        self._cf.commander.send_setpoint(0, 0, 0, 0)
+        # Make sure that the last packet leaves before the link is closed
+        # since the message queue is not flushed before closing
+        time.sleep(0.1)
+        # self._cf.close_link()
+
+    def takeOff(self):
+        Thread(target=self.take_off_simple()).start()
+        # time.sleep(3)
 
 
 if __name__ == "__main__":
