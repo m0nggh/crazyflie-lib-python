@@ -54,6 +54,15 @@ class Interface:
 
     globalList = []
     DEFAULT_HEIGHT = 0.5
+    sequence = [
+        (2.5, 2.5, 1.2, 0),
+        (1.5, 2.5, 1.2, 0),
+        (2.5, 2.0, 1.2, 0),
+        (3.5, 2.5, 1.2, 0),
+        (2.5, 3.0, 1.2, 0),
+        (2.5, 2.5, 1.2, 0),
+        (2.5, 2.5, 0.4, 0),
+    ]
 
     def __init__(self, link_uri):
         """Initialize and run the example with the specified link_uri"""
@@ -75,6 +84,9 @@ class Interface:
 
         # Variable used to keep main loop occupied until disconnect
         self.is_connected = True
+
+        self.shouldFly = False
+        self.shouldDisplay = False
 
     def _connected(self, link_uri):
         """This callback is called form the Crazyflie API when a Crazyflie
@@ -109,11 +121,10 @@ class Interface:
             print("Could not add Stabilizer log config, bad configuration.")
 
         # Start a timer to disconnect in 5s
-        t = Timer(10, self._cf.close_link)
-        t.start()
-        # with MotionCommander(self._cf, default_height=self.DEFAULT_HEIGHT) as mc:
-        #     time.sleep(3)
-        #     mc.stop()
+        # t = Timer(5, self._cf.close_link)
+        # t.start()
+        # time.sleep(2)
+        # self.returnList()
 
     def _stab_log_error(self, logconf, msg):
         """Callback from the log API when an error occurs"""
@@ -127,9 +138,15 @@ class Interface:
             print(f"{name}: {value:3.3f} ", end="")
             tempList.append(value)
         print()
-        self.globalList = list(np.around(np.array(tempList), 2))
-        # print(self.globalList)
-        return self.globalList
+        self.globalList = list(
+            np.around(np.array(tempList), 2)
+        )  # store the global list in as 2dp format
+
+        # conduct a series of check for drone to perform certain functions called by clojure
+        if self.shouldDisplay:
+            self.return_list_helper()
+        if self.shouldFly:
+            self.take_off_helper()
 
     def _connection_failed(self, link_uri, msg):
         """Callback when connection initial connection fails (i.e no Crazyflie
@@ -152,19 +169,18 @@ class Interface:
         t = Timer(1, self._cf.close_link)
         t.start()
 
-    def returnList(self):
+    def return_list_helper(self):
         """Helper function to return real time data on clojure side"""
+        # print("The list has been returned:.{}".format(self.globalList))
         print(self.globalList)
+        # time.sleep(0.1)
+        self.shouldDisplay = False
         return self.globalList
 
-    def returnThread(self):
-        Thread(target=self.returnList()).start()
-        # time.sleep(3)
+    def return_list(self):
+        self.shouldDisplay = True
 
-    def take_off_simple(self):
-        # with MotionCommander(self._cf, default_height=self.DEFAULT_HEIGHT) as mc:
-        #     time.sleep(3)
-        #     mc.stop()
+    def take_off_helper(self):
         thrust_mult = 1
         thrust_step = 500
         thrust = 20000
@@ -185,11 +201,26 @@ class Interface:
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
         time.sleep(0.1)
+        self.shouldFly = False  # retrieve back permission
         # self._cf.close_link()
 
-    def takeOff(self):
-        Thread(target=self.take_off_simple()).start()
-        # time.sleep(3)
+    def take_off(self):
+        self.shouldFly = True
+
+    def runSequence(self):
+        for position in self.sequence:
+            print("Setting position {}".format(position))
+            for i in range(50):
+                self._cf.commander.send_position_setpoint(
+                    position[0], position[1], position[2], position[3]
+                )
+                time.sleep(0.1)
+
+        self._cf.commander.send_stop_setpoint()
+        # Make sure that the last packet leaves before the link is closed
+        # since the message queue is not flushed before closing
+        time.sleep(0.1)
+        self.shouldFly = False
 
 
 if __name__ == "__main__":

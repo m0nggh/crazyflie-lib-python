@@ -22,6 +22,15 @@ class Interface:
     """
 
     uri = "radio://0/80/250K/E7E7E7E7E7"
+    sequence = [
+        (2.5, 2.5, 1.2, 0),
+        (1.5, 2.5, 1.2, 0),
+        (2.5, 2.0, 1.2, 0),
+        (3.5, 2.5, 1.2, 0),
+        (2.5, 3.0, 1.2, 0),
+        (2.5, 2.5, 1.2, 0),
+        (2.5, 2.5, 0.4, 0),
+    ]
 
     def __init__(self):
         """Initialize and run the example with the specified link_uri"""
@@ -30,13 +39,13 @@ class Interface:
         print(uri)
         self._cf = Crazyflie(rw_cache="./cache")
 
-        lg_stab = LogConfig(
+        self.lg_stab = LogConfig(
             name="StateEstimate", period_in_ms=100
         )  # min 10ms, currently set to 1s, default is 40ms
         # only can contain up to 26bytes
-        lg_stab.add_variable("stateEstimate.roll", "float")
-        lg_stab.add_variable("stateEstimate.pitch", "float")
-        lg_stab.add_variable("stateEstimate.yaw", "float")
+        self.lg_stab.add_variable("stateEstimate.roll", "float")
+        self.lg_stab.add_variable("stateEstimate.pitch", "float")
+        self.lg_stab.add_variable("stateEstimate.yaw", "float")
         # lg_stab.add_variable('stateEstimate.x', 'float')
         # lg_stab.add_variable('stateEstimate.y', 'float')
         # lg_stab.add_variable('stateEstimate.z', 'float')
@@ -46,8 +55,10 @@ class Interface:
         with SyncCrazyflie(uri, self._cf) as scf:
 
             # self.simple_connect()
-            self.simple_log_async(scf, lg_stab)
-            print("is the function even working")
+            while True:
+                self.simple_log_async(scf, self.lg_stab)
+                print("is the function even working")
+                self.runSequence()
 
     # added intermediate functions to test if the list can be returned properly
 
@@ -61,10 +72,10 @@ class Interface:
         self._cf.log.add_config(logconf)
         logconf.data_received_cb.add_callback(self.log_stab_callback)
         logconf.start()  # logconf needs to be started manually and stopped
-        time.sleep(
-            10
-        )  # can set to a very huge number so the logconf takes in values continuously
-        logconf.stop()
+        # time.sleep(
+        #     10
+        # )  # can set to a very huge number so the logconf takes in values continuously
+        # logconf.stop()
 
     def log_stab_callback(self, timestamp, data, logconf):
         tempList = []
@@ -88,6 +99,54 @@ class Interface:
         print("hello world")
         return globalList
 
+    def _ramp_motors(self):
+        thrust_mult = 1
+        thrust_step = 500
+        thrust = 20000
+        pitch = 0
+        roll = 0
+        yawrate = 0
+
+        # Unlock startup thrust protection
+        self._cf.commander.send_setpoint(0, 0, 0, 0)
+
+        while thrust >= 20000:
+            self._cf.commander.send_setpoint(roll, pitch, yawrate, thrust)
+            time.sleep(0.1)
+            if thrust >= 25000:
+                thrust_mult = -1
+            thrust += thrust_step * thrust_mult
+        self._cf.commander.send_setpoint(0, 0, 0, 0)
+        # Make sure that the last packet leaves before the link is closed
+        # since the message queue is not flushed before closing
+        time.sleep(0.1)
+
+    def runSequence(self):
+        for position in self.sequence:
+            print("Setting position {}".format(position))
+            for i in range(50):
+                self._cf.commander.send_position_setpoint(
+                    position[0], position[1], position[2], position[3]
+                )
+                time.sleep(0.1)
+
+        self._cf.commander.send_stop_setpoint()
+        # Make sure that the last packet leaves before the link is closed
+        # since the message queue is not flushed before closing
+        time.sleep(0.1)
+
+
+if __name__ == "__main__":
+    # Initialize the low-level drivers
+    cflib.crtp.init_drivers()
+
+    le = Interface()
+
+    # The Crazyflie lib doesn't contain anything to keep the application alive,
+    # so this is where your application should do something. In our case we
+    # are just waiting until we are disconnected.
+    # while le.is_connected:
+    #     time.sleep(1)
 
 # def simple_connect():
 #     print("Yeah, I'm connected! :D")
