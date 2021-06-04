@@ -25,7 +25,8 @@
 #  MA  02110-1301, USA.
 """
 Simple example that connects to the first Crazyflie found, logs the Stabilizer
-and prints it to the console. After 5s the application disconnects and exits.
+and prints it to the console. While logging, the file executes helper functions called
+from Clojure side as whenever.
 This file is referenced and adapted from basiclog.py and ramp.py
 """
 import logging
@@ -38,7 +39,6 @@ import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper
-from cflib.positioning.motion_commander import MotionCommander
 
 uri = uri_helper.uri_from_env(default="radio://0/80/250K/E7E7E7E7E7")
 
@@ -52,9 +52,8 @@ class Interface:
     link uri and disconnects after 5s.
     """
 
-    globalList = []
-    DEFAULT_HEIGHT = 0.5
     sequence = [
+        # x, y, z (in m), yaw
         (2.5, 2.5, 1.2, 0),
         (1.5, 2.5, 1.2, 0),
         (2.5, 2.0, 1.2, 0),
@@ -82,11 +81,15 @@ class Interface:
         # Try to connect to the Crazyflie
         self._cf.open_link(link_uri)
 
+        # Variable for storing all the variables in a list
+        self.global_list = []
+
         # Variable used to keep main loop occupied until disconnect
         self.is_connected = True
 
-        self.shouldFly = False
-        self.shouldDisplay = False
+        # Variables used to determine whether to execute helper functions
+        self.should_fly = False
+        self.should_display = False
 
     def _connected(self, link_uri):
         """This callback is called form the Crazyflie API when a Crazyflie
@@ -123,8 +126,6 @@ class Interface:
         # Start a timer to disconnect in 5s
         # t = Timer(5, self._cf.close_link)
         # t.start()
-        # time.sleep(2)
-        # self.returnList()
 
     def _stab_log_error(self, logconf, msg):
         """Callback from the log API when an error occurs"""
@@ -132,21 +133,21 @@ class Interface:
 
     def _stab_log_data(self, timestamp, data, logconf):
         """Callback from a the log API when data arrives"""
-        tempList = []
+        temp_list = []
         print(f"[{timestamp}][{logconf.name}]: ", end="")
         for name, value in data.items():
             print(f"{name}: {value:3.3f} ", end="")
-            tempList.append(value)
+            temp_list.append(value)
         print()
-        self.globalList = list(
-            np.around(np.array(tempList), 2)
-        )  # store the global list in as 2dp format
+        self.global_list = list(
+            np.around(np.array(temp_list), 2)
+        )  # store the global list as 2dp format
 
         # conduct a series of check for drone to perform certain functions called by clojure
-        if self.shouldDisplay:
-            self.return_list_helper()
-        if self.shouldFly:
-            self.take_off_helper()
+        if self.should_display:
+            Thread(target=self.return_list_helper()).start()
+        if self.should_fly:
+            Thread(target=self.take_off_helper()).start()
 
     def _connection_failed(self, link_uri, msg):
         """Callback when connection initial connection fails (i.e no Crazyflie
@@ -164,50 +165,52 @@ class Interface:
         print("Disconnected from %s" % link_uri)
         self.is_connected = False
 
-    def manuallyDisconnect(self):
+    def manually_disconnect(self):
         """Helper function to allow manual disconnection on clojure side after 1 second of delay"""
         t = Timer(1, self._cf.close_link)
         t.start()
 
     def return_list_helper(self):
         """Helper function to return real time data on clojure side"""
-        # print("The list has been returned:.{}".format(self.globalList))
-        print(self.globalList)
+        print("The list has been returned:.{}".format(self.global_list))
         # time.sleep(0.1)
-        self.shouldDisplay = False
-        return self.globalList
+        self.should_display = False
+        return self.global_list
 
     def return_list(self):
-        self.shouldDisplay = True
+        self.should_display = True
 
     def take_off_helper(self):
+        # orientation is with reference to the blue lights closer towards user
+        print("Time to take off!")
         thrust_mult = 1
         thrust_step = 500
-        thrust = 20000
-        pitch = 0
-        roll = 0
-        yawrate = 0
+        thrust = 30000  # upwards vertical force
+        pitch = 0  # tilt upwards for positive (e.g. like lifting off)
+        roll = 0  # tilt sideways (right for positive)
+        yawrate = 0  # rotate clockwise for positive values
 
         # Unlock startup thrust protection
         self._cf.commander.send_setpoint(0, 0, 0, 0)
 
         while thrust >= 20000:
+            # pitch += 5
             self._cf.commander.send_setpoint(roll, pitch, yawrate, thrust)
             time.sleep(0.1)
-            if thrust >= 25000:
+            if thrust >= 35000:
                 thrust_mult = -1
             thrust += thrust_step * thrust_mult
         self._cf.commander.send_setpoint(0, 0, 0, 0)
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
         time.sleep(0.1)
-        self.shouldFly = False  # retrieve back permission
+        self.should_fly = False  # retrieve back permission
         # self._cf.close_link()
 
     def take_off(self):
-        self.shouldFly = True
+        self.should_fly = True
 
-    def runSequence(self):
+    def run_sequence(self):
         for position in self.sequence:
             print("Setting position {}".format(position))
             for i in range(50):
@@ -220,7 +223,7 @@ class Interface:
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
         time.sleep(0.1)
-        self.shouldFly = False
+        self.should_fly = False
 
 
 if __name__ == "__main__":
