@@ -87,9 +87,10 @@ class Interface:
         # Variable used to keep main loop occupied until disconnect
         self.is_connected = True
 
-        # Variables used to determine whether to execute helper functions
+        # Variables used to execute helper functions
         self.should_fly = False
         self.should_display = False
+        self.input_thrust = 0
 
     def _connected(self, link_uri):
         """This callback is called form the Crazyflie API when a Crazyflie
@@ -134,11 +135,11 @@ class Interface:
     def _stab_log_data(self, timestamp, data, logconf):
         """Callback from a the log API when data arrives"""
         temp_list = []
-        print(f"[{timestamp}][{logconf.name}]: ", end="")
+        # print(f"[{timestamp}][{logconf.name}]: ", end="")
         for name, value in data.items():
-            print(f"{name}: {value:3.3f} ", end="")
+            # print(f"{name}: {value:3.3f} ", end="")
             temp_list.append(value)
-        print()
+        # print()
         self.global_list = list(
             np.around(np.array(temp_list), 2)
         )  # store the global list as 2dp format
@@ -184,8 +185,9 @@ class Interface:
         # orientation is with reference to the blue lights closer towards user
         print("Time to take off!")
         thrust_mult = 1
-        thrust_step = 500
-        thrust = 30000  # upwards vertical force
+        thrust_step = 500  # increment unit
+        thrust = self.input_thrust  # upwards vertical force
+        thrust_limit = thrust + 5000  # set limit to the max thrust
         pitch = 0  # tilt upwards for positive (e.g. like lifting off)
         roll = 0  # tilt sideways (right for positive)
         yawrate = 0  # rotate clockwise for positive values
@@ -193,22 +195,23 @@ class Interface:
         # Unlock startup thrust protection
         self._cf.commander.send_setpoint(0, 0, 0, 0)
 
-        while thrust >= 20000:
-            # pitch += 5
+        while thrust >= self.input_thrust:
+            print("current thrust:", thrust)
             self._cf.commander.send_setpoint(roll, pitch, yawrate, thrust)
             time.sleep(0.1)
-            if thrust >= 35000:
-                thrust_mult = -1
+            if thrust >= thrust_limit:
+                thrust_mult = -1  # start the descent
             thrust += thrust_step * thrust_mult
         self._cf.commander.send_setpoint(0, 0, 0, 0)
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
         time.sleep(0.1)
         self.should_fly = False  # retrieve back permission
-        # self._cf.close_link()
+        self.input_thrust = 0  # reset the thrust as a defensive precaution
 
-    def take_off(self):
+    def take_off(self, thrust):
         self.should_fly = True
+        self.input_thrust = thrust  # do type conversion from string to int
 
     def run_sequence(self):
         for position in self.sequence:
