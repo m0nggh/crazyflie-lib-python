@@ -91,6 +91,9 @@ class Interface:
         self.should_fly = False
         self.should_display = False
         self.input_thrust = 0
+        self.default_pitch = 0
+        self.default_roll = 0
+        self.default_yaw = 0
 
     def _connected(self, link_uri):
         """This callback is called form the Crazyflie API when a Crazyflie
@@ -180,6 +183,14 @@ class Interface:
 
     def return_list(self):
         self.should_display = True
+        return self.global_list
+
+    def take_off_helper2(self):
+        self._cf.commander.send_velocity_world_setpoint(
+            0, 0, 0.1, 0
+        )  # vx, vy, vz, yawrate
+        time.sleep(2)
+        self.should_fly = False
 
     def take_off_helper(self):
         # orientation is with reference to the blue lights closer towards user
@@ -188,30 +199,48 @@ class Interface:
         thrust_step = 500  # increment unit
         thrust = self.input_thrust  # upwards vertical force
         thrust_limit = thrust + 5000  # set limit to the max thrust
-        pitch = 0  # tilt upwards for positive (e.g. like lifting off)
-        roll = 0  # tilt sideways (right for positive)
-        yawrate = 0  # rotate clockwise for positive values
+        # set roll, pitch, yaw as default values first
+        pitch = self.default_pitch  # tilt upwards for positive (e.g. like lifting off)
+        roll = self.default_roll  # tilt sideways (right for positive)
+        yawrate = self.default_yaw  # rotate anti-clockwise for positive values
+        countdown = 3
 
         # Unlock startup thrust protection
         self._cf.commander.send_setpoint(0, 0, 0, 0)
 
-        while thrust >= self.input_thrust:
+        # while thrust >= self.input_thrust:
+        while countdown > 0:
             print("current thrust:", thrust)
             self._cf.commander.send_setpoint(roll, pitch, yawrate, thrust)
             time.sleep(0.1)
             if thrust >= thrust_limit:
                 thrust_mult = -1  # start the descent
             thrust += thrust_step * thrust_mult
+            countdown -= 0.2
         self._cf.commander.send_setpoint(0, 0, 0, 0)
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
         time.sleep(0.1)
         self.should_fly = False  # retrieve back permission
+        # reset all the values for thrust, roll, pitch and yaw
         self.input_thrust = 0  # reset the thrust as a defensive precaution
+        self.default_roll = 0
+        self.default_pitch = 0
+        self.default_yaw = 0
 
-    def take_off(self, thrust):
+    def take_off(self, action, thrust=25000):
         self.should_fly = True
-        self.input_thrust = thrust  # do type conversion from string to int
+        self.input_thrust = thrust
+        if action == "right":
+            self.default_roll = 2
+        elif action == "left":
+            self.default_roll = -2
+        elif action == "forward":
+            self.default_pitch = 2
+        elif action == "backward":
+            self.default_pitch = -2
+        elif action == "upwards":
+            pass
 
     def run_sequence(self):
         for position in self.sequence:
