@@ -94,6 +94,7 @@ class Interface:
         self.default_pitch = 0
         self.default_roll = 0
         self.default_yaw = 0
+        self.input_countdown = 0
 
     def _connected(self, link_uri):
         """This callback is called form the Crazyflie API when a Crazyflie
@@ -171,6 +172,7 @@ class Interface:
 
     def manually_disconnect(self):
         """Helper function to allow manual disconnection on clojure side after 1 second of delay"""
+        print("Drone has been disconnected!")
         t = Timer(1, self._cf.close_link)
         t.start()
 
@@ -203,20 +205,19 @@ class Interface:
         pitch = self.default_pitch  # tilt upwards for positive (e.g. like lifting off)
         roll = self.default_roll  # tilt sideways (right for positive)
         yawrate = self.default_yaw  # rotate anti-clockwise for positive values
-        countdown = 3
 
         # Unlock startup thrust protection
         self._cf.commander.send_setpoint(0, 0, 0, 0)
 
         # while thrust >= self.input_thrust:
-        while countdown > 0:
+        while self.input_countdown > 0:
             print("current thrust:", thrust)
             self._cf.commander.send_setpoint(roll, pitch, yawrate, thrust)
             time.sleep(0.1)
             if thrust >= thrust_limit:
                 thrust_mult = -1  # start the descent
             thrust += thrust_step * thrust_mult
-            countdown -= 0.2
+            self.input_countdown -= 0.2
         self._cf.commander.send_setpoint(0, 0, 0, 0)
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
@@ -228,17 +229,18 @@ class Interface:
         self.default_pitch = 0
         self.default_yaw = 0
 
-    def take_off(self, action, thrust=25000):
+    def take_off(self, action, thrust=25000, countdown=3):
         self.should_fly = True
         self.input_thrust = thrust
+        self.input_countdown = countdown
         if action == "right":
-            self.default_roll = 2
+            self.default_roll = 3
         elif action == "left":
-            self.default_roll = -2
+            self.default_roll = -3
         elif action == "forward":
-            self.default_pitch = 2
+            self.default_pitch = 3
         elif action == "backward":
-            self.default_pitch = -2
+            self.default_pitch = -3
         elif action == "upwards":
             pass
 
