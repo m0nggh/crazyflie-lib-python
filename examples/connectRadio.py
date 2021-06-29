@@ -90,11 +90,11 @@ class Interface:
         # Variables used to execute helper functions
         self.should_fly = False
         self.should_display = False
-        self.input_thrust = 0
         self.default_pitch = 0
         self.default_roll = 0
         self.default_yaw = 0
-        self.input_countdown = 0
+        self.default_thrust = 25000  # flying is around 35000
+        self.default_countdown = 5
 
     def _connected(self, link_uri):
         """This callback is called form the Crazyflie API when a Crazyflie
@@ -152,7 +152,7 @@ class Interface:
         if self.should_display:
             Thread(target=self.return_list_helper()).start()
         if self.should_fly:
-            Thread(target=self.take_off_helper()).start()
+            Thread(target=self.navigate_helper()).start()
 
     def _connection_failed(self, link_uri, msg):
         """Callback when connection initial connection fails (i.e no Crazyflie
@@ -187,19 +187,41 @@ class Interface:
         self.should_display = True
         return self.global_list
 
-    def take_off_helper2(self):
-        self._cf.commander.send_velocity_world_setpoint(
-            0, 0, 0.1, 0
-        )  # vx, vy, vz, yawrate
-        time.sleep(2)
-        self.should_fly = False
+    def navigate_helper(self):
+        # self._cf.commander.send_velocity_world_setpoint(
+        #     0, 0, 0.1, 0
+        # )  # vx, vy, vz, yawrate
 
-    def take_off_helper(self):
+        # Unlock startup thrust protection
+        self._cf.commander.send_setpoint(0, 0, 0, 0)
+
+        while self.default_countdown > 0:
+            self._cf.commander.send_setpoint(
+                self.default_roll,
+                self.default_pitch,
+                self.default_yaw,
+                self.default_thrust,
+            )
+            time.sleep(0.1)
+            self.default_countdown -= 0.2
+        self._cf.commander.send_setpoint(0, 0, 0, 0)
+        # Make sure that the last packet leaves before the link is closed
+        # since the message queue is not flushed before closing
+        time.sleep(0.1)
+        self.should_fly = False
+        # reset all the values for thrust, roll, pitch, yaw and countdown
+        self.default = 25000
+        self.default_countdown = 5
+        self.default_roll = 0
+        self.default_pitch = 0
+        self.default_yaw = 0
+
+    def navigate_helper2(self):
         # orientation is with reference to the blue lights closer towards user
         print("Time to take off!")
         thrust_mult = 1
         thrust_step = 500  # increment unit
-        thrust = self.input_thrust  # upwards vertical force
+        thrust = self.default_thrust  # upwards vertical force
         thrust_limit = thrust + 5000  # set limit to the max thrust
         # set roll, pitch, yaw as default values first
         pitch = self.default_pitch  # tilt upwards for positive (e.g. like lifting off)
@@ -209,30 +231,28 @@ class Interface:
         # Unlock startup thrust protection
         self._cf.commander.send_setpoint(0, 0, 0, 0)
 
-        # while thrust >= self.input_thrust:
-        while self.input_countdown > 0:
+        # while thrust >= self.default_thrust:
+        while self.default_countdown > 0:
             print("current thrust:", thrust)
             self._cf.commander.send_setpoint(roll, pitch, yawrate, thrust)
             time.sleep(0.1)
             if thrust >= thrust_limit:
                 thrust_mult = -1  # start the descent
             thrust += thrust_step * thrust_mult
-            self.input_countdown -= 0.2
+            self.default_countdown -= 0.2
         self._cf.commander.send_setpoint(0, 0, 0, 0)
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
         time.sleep(0.1)
         self.should_fly = False  # retrieve back permission
         # reset all the values for thrust, roll, pitch and yaw
-        self.input_thrust = 0  # reset the thrust as a defensive precaution
+        self.default_thrust = 0  # reset the thrust as a defensive precaution
         self.default_roll = 0
         self.default_pitch = 0
         self.default_yaw = 0
 
-    def take_off(self, action, thrust=25000, countdown=3):
+    def navigate(self, action):
         self.should_fly = True
-        self.input_thrust = thrust
-        self.input_countdown = countdown
         if action == "right":
             self.default_roll = 3
         elif action == "left":
@@ -242,7 +262,9 @@ class Interface:
         elif action == "backward":
             self.default_pitch = -3
         elif action == "upwards":
-            pass
+            self.default_thrust = 33000
+        elif action == "downwards":
+            self.default_thrust = 2000
 
     def run_sequence(self):
         for position in self.sequence:
